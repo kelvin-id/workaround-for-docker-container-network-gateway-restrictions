@@ -1,0 +1,99 @@
+# alice(172.28.0.3) <-> (172.28.0.2)moon(172.30.0.2) <-> (172.30.0.4)sun(172.29.0.4) <-> (172.29.0.5)bob
+version: "3.3"
+
+services:
+
+  alice:
+    container_name: alice
+    image: ubuntu-with-tools
+    build:
+      context: .
+      dockerfile: Dockerfile
+    cap_add:
+      - NET_ADMIN
+    hostname: alice
+    networks:
+      moon-internal:
+        ipv4_address: 172.28.0.3
+    command: >-
+      sh -c "ip route del default &&
+      ip route add default via 172.28.0.2 &&
+      tail -f /dev/null"
+
+  moon:
+    container_name: moon
+    image: ubuntu-with-tools
+    build:
+      context: .
+      dockerfile: Dockerfile
+    cap_add:
+      - NET_ADMIN
+    hostname: moon
+    networks:
+      moon-internal:
+        ipv4_address: 172.28.0.2
+      internet:
+        ipv4_address: 172.30.0.2
+    command: >-
+      sh -c "iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE &&
+      iptables -t nat -A POSTROUTING -o eth1 -j MASQUERADE &&
+      iptables -A FORWARD -i eth1 -j ACCEPT &&
+      iptables -A FORWARD -i eth0 -j ACCEPT &&
+      ip route add 172.29.0.0/16 via 172.30.0.4 &&
+      tail -f /dev/null"
+
+  sun:
+    container_name: sun
+    image: ubuntu-with-tools
+    build:
+      context: .
+      dockerfile: Dockerfile
+    cap_add:
+      - NET_ADMIN
+    hostname: sun
+    networks:
+      sun-internal:
+        ipv4_address: 172.29.0.4
+      internet:
+        ipv4_address: 172.30.0.4
+    command: >-
+      sh -c "iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE &&
+      iptables -t nat -A POSTROUTING -o eth1 -j MASQUERADE &&
+      iptables -A FORWARD -i eth1 -j ACCEPT &&
+      iptables -A FORWARD -i eth0 -j ACCEPT &&
+      ip route add 172.28.0.0/16 via 172.30.0.2 &&
+      tail -f /dev/null"
+
+  bob:
+    container_name: bob
+    image: ubuntu-with-tools
+    build:
+      context: .
+      dockerfile: Dockerfile
+    cap_add:
+      - NET_ADMIN
+    hostname: bob
+    networks:
+      sun-internal:
+        ipv4_address: 172.29.0.5
+    command: >-
+      sh -c "ip route del default &&
+      ip route add default via 172.29.0.4 &&
+      tail -f /dev/null"
+
+networks:
+  moon-internal:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+  sun-internal:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.29.0.0/16
+  internet:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/16
